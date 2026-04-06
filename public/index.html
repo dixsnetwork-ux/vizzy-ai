@@ -1,10 +1,10 @@
-<!-- public/index.html - Frontend (YouTube analiz entegre, hatasız) -->
+<!-- public/index.html - YouTube özelliği tamamen kaldırılmış, sadece sohbet + görsel -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-  <title>Vizzy AI – YouTube Analizli Sohbet</title>
+  <title>Vizzy AI – Akıllı Asistan</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -92,14 +92,14 @@
       <div class="welcome-message" id="welcomeMessage">
         <i class="fas fa-robot"></i>
         <h2>Vizzy AI</h2>
-        <p>Nasıl yardımcı olabilirim? 😊 Resim gönderebilir, YouTube linki analiz ettirebilirsin.</p>
+        <p>Nasıl yardımcı olabilirim? 😊 Resim de gönderebilirsin.</p>
       </div>
       <div id="messagesList"></div>
     </div>
     <div class="input-area">
       <div class="input-wrapper">
         <button class="icon-btn" id="imageBtn"><i class="fas fa-image"></i></button>
-        <textarea id="messageInput" placeholder="Mesaj yaz veya YouTube linki yapıştır... (Enter)" rows="1"></textarea>
+        <textarea id="messageInput" placeholder="Mesaj yaz... (Enter)" rows="1"></textarea>
         <button class="send-btn" id="sendBtn"><i class="fas fa-paper-plane"></i></button>
       </div>
       <input type="file" id="imageUpload" accept="image/*" style="display:none">
@@ -184,5 +184,11 @@
     function removeTyping() { const el = document.getElementById('typing-indicator'); if (el) el.remove(); }
     function showToast(msg) { const toast = document.createElement('div'); toast.className = 'error-toast'; toast.innerText = msg; document.body.appendChild(toast); setTimeout(() => toast.remove(), 3000); }
     function escapeHtml(str) { return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'); }
-    function isYouTubeUrl(text) { const patterns = [ /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/, /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/ ]; return patterns.some(pattern => pattern.test(text)); }
-    async function analyzeYouTubeVideo(videoUrl) { try { const loadingMsg = "📹 Video analiz ediliyor, lütfen bekleyin..."; currentMessages.push({ role: 'assistant', content: loadingMsg }); addMessageToDOM(loadingMsg, 'assistant'); const response = await fetch(`/api/youtube-analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoUrl, userId, convId: currentConvId }) }); if (!response.ok) { const errData = await response.json(); throw new Error(errData.error || `API hatası: ${response.status}`); } const data = await response.json(); let resultMessage = `🎬 **YouTube Video Özeti**\n\n**Ana Konu:** ${data.topic}\n\n**Özet:** ${data.summary}\n\n**Önemli Noktalar:**\n`; data.keyPoints.forEach(p => resultMessage += `• ${p}\n`); const loadingDiv = document.getElementById('typing-indicator'); if (loadingDiv) loadingDiv.remove(); if (currentMessages[
+    async function sendTextMessage(message) { if (!message.trim() || isLoading || !currentConvId) return; currentMessages.push({ role: 'user', content: message }); addMessageToDOM(message, 'user'); inputEl.value = ''; inputEl.style.height = 'auto'; isLoading = true; sendBtn.disabled = true; showTyping(); try { const res = await fetch(`/api/chat/${currentConvId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, userId }) }); if (!res.ok) throw new Error('Sunucu hatası'); const reader = res.body.getReader(); const decoder = new TextDecoder(); let full = ''; let assistantDiv = null; removeTyping(); while (true) { const { done, value } = await reader.read(); if (done) break; const chunk = decoder.decode(value); full += chunk; if (!assistantDiv) { const msgDiv = document.createElement('div'); msgDiv.className = 'message assistant'; const av = document.createElement('div'); av.className = 'message-avatar'; av.innerHTML = '<i class="fas fa-robot"></i>'; const cont = document.createElement('div'); cont.className = 'message-content'; msgDiv.appendChild(av); msgDiv.appendChild(cont); messagesListDiv.appendChild(msgDiv); assistantDiv = cont; } assistantDiv.innerText = full; scrollToBottom(); } currentMessages.push({ role: 'assistant', content: full }); await loadConversation(currentConvId); await fetchConversations(); } catch (e) { removeTyping(); showToast(e.message); } finally { isLoading = false; sendBtn.disabled = false; inputEl.focus(); } }
+    async function sendImageWithCaption(imageFile, caption) { if (!imageFile || !currentConvId) return; const formData = new FormData(); formData.append('image', imageFile); formData.append('message', caption || ''); formData.append('userId', userId); const imageUrl = URL.createObjectURL(imageFile); currentMessages.push({ role: 'user', content: `[Resim: ${imageUrl}]\n${caption || ''}` }); addMessageToDOM(caption || '', 'user', imageUrl); isLoading = true; sendBtn.disabled = true; showTyping(); try { const res = await fetch(`/api/vision/${currentConvId}`, { method: 'POST', body: formData }); if (!res.ok) throw new Error('Görsel işlenemedi'); const reader = res.body.getReader(); const decoder = new TextDecoder(); let full = ''; let assistantDiv = null; removeTyping(); while (true) { const { done, value } = await reader.read(); if (done) break; const chunk = decoder.decode(value); full += chunk; if (!assistantDiv) { const msgDiv = document.createElement('div'); msgDiv.className = 'message assistant'; const av = document.createElement('div'); av.className = 'message-avatar'; av.innerHTML = '<i class="fas fa-robot"></i>'; const cont = document.createElement('div'); cont.className = 'message-content'; msgDiv.appendChild(av); msgDiv.appendChild(cont); messagesListDiv.appendChild(msgDiv); assistantDiv = cont; } assistantDiv.innerText = full; scrollToBottom(); } currentMessages.push({ role: 'assistant', content: full }); await loadConversation(currentConvId); await fetchConversations(); } catch (e) { removeTyping(); showToast(e.message); } finally { isLoading = false; sendBtn.disabled = false; inputEl.focus(); } }
+    imageBtn?.addEventListener('click', () => imageUpload.click()); imageUpload?.addEventListener('change', (e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onload = (ev) => { previewImg.src = ev.target.result; previewCaption.value = ''; imagePreviewModal.classList.add('active'); pendingImageFile = file; }; reader.readAsDataURL(file); } imageUpload.value = ''; }); sendImageBtn?.addEventListener('click', () => { if (pendingImageFile) { sendImageWithCaption(pendingImageFile, previewCaption.value.trim()); imagePreviewModal.classList.remove('active'); pendingImageFile = null; } }); imagePreviewModal?.addEventListener('click', (e) => { if (e.target === imagePreviewModal) imagePreviewModal.classList.remove('active'); }); inputEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const msg = inputEl.value.trim(); if (msg) sendTextMessage(msg); } }); sendBtn?.addEventListener('click', () => { const msg = inputEl.value.trim(); if (msg) sendTextMessage(msg); }); newChatBtn?.addEventListener('click', async () => { await startNewChat(); await fetchConversations(); }); settingsBtn?.addEventListener('click', async () => { await loadSettings(); settingsModal.classList.add('active'); }); saveSettingsBtn?.addEventListener('click', saveSettings); cancelSettingsBtn?.addEventListener('click', () => settingsModal.classList.remove('active')); inputEl?.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 110) + 'px'; }); inputEl?.addEventListener('focus', () => { setTimeout(() => safeScrollToBottom(), 100); });
+    (async () => { await fetchConversations(); if (currentConvId && conversations.some(c => c.id === currentConvId)) { await loadConversation(currentConvId); } else if (conversations.length) { await loadConversation(conversations[0].id); } else { await startNewChat(); } inputEl?.focus(); safeScrollToBottom(); })();
+  })();
+</script>
+</body>
+</html>
