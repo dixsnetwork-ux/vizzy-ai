@@ -1,18 +1,16 @@
-// index.js - Backend (YouTube analiz hatasız, gerçek transcript)
+// index.js - Vizzy AI (YouTube analiz özelliği KALDIRILMIŞTIR, sadece sohbet + görsel)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const Groq = require('groq-sdk');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const multer = require('multer');
-const { YoutubeTranscript } = require('youtube-transcript-api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// API key kontrolü
 if (!process.env.GROQ_API_KEY || !process.env.GEMINI_API_KEY) {
-  console.error('❌ API keys eksik! GROQ_API_KEY ve GEMINI_API_KEY ortam değişkenlerini ayarlayın.');
+  console.error('❌ GROQ_API_KEY ve GEMINI_API_KEY ortam değişkenleri eksik!');
   process.exit(1);
 }
 
@@ -190,19 +188,6 @@ async function callVision(userId, conv, userMessage, imageBase64, res) {
   }
 }
 
-// --------------------- YouTube yardımcıları ---------------------
-function extractYouTubeId(url) {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match && match[1]) return match[1];
-  }
-  return null;
-}
-
 // --------------------- Rate limiting ve queue ---------------------
 const rateStore = new Map();
 function rateLimit(ip, userId) {
@@ -364,55 +349,6 @@ app.post('/api/vision/:convId', upload.single('image'), async (req, res) => {
     await updateConversation(userId, convId, userMessage, response, 'image');
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: 'Görsel işlenirken hata oluştu.' });
-  }
-});
-
-// ---------- YouTube analiz endpoint (gerçek, hata yok) ----------
-app.post('/api/youtube-analyze', async (req, res) => {
-  const { videoUrl } = req.body;
-  if (!videoUrl) return res.status(400).json({ error: 'Video URL gerekli' });
-
-  const videoId = extractYouTubeId(videoUrl);
-  if (!videoId) return res.status(400).json({ error: 'Geçersiz YouTube URL' });
-
-  try {
-    // Gerçek transcript alma
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    if (!transcript || transcript.length === 0) {
-      return res.status(400).json({ error: 'Video için transcript bulunamadı' });
-    }
-    const transcriptText = transcript.map(t => t.text).join(' ').slice(0, 14000);
-
-    const prompt = `Aşağıdaki YouTube videosunun transkriptini analiz et ve şu bilgileri Türkçe olarak sağla:
-- Ana Konu (kısa ve öz)
-- Kısa Özet (2-3 cümle)
-- Önemli Noktalar (madde işaretleriyle, 3-5 madde)
-
-Transkript: ${transcriptText}`;
-
-    const result = await geminiModel.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
-    });
-    const analysis = result.response.text();
-
-    // Basit parse
-    const topicMatch = analysis.match(/\*\*Ana Konu\*\*:? (.*)/i);
-    const summaryMatch = analysis.match(/\*\*(Kısa )?Özet\*\*:? ([\s\S]*?)(?=\*\*|$)/i);
-    const pointsMatch = analysis.match(/\*\*Önemli Noktalar\*\*:? ([\s\S]*)/i);
-    let keyPoints = [];
-    if (pointsMatch && pointsMatch[1]) {
-      keyPoints = pointsMatch[1].split(/\n/).filter(line => line.trim().startsWith('-') || line.trim().startsWith('•')).map(line => line.replace(/^[-•]\s*/, '').trim());
-    }
-    const responseData = {
-      topic: topicMatch ? topicMatch[1].trim() : 'Konu belirlenemedi',
-      summary: summaryMatch ? summaryMatch[2].trim() : 'Özet alınamadı',
-      keyPoints: keyPoints.length ? keyPoints : ['Önemli nokta listelenemedi']
-    };
-    res.json(responseData);
-  } catch (error) {
-    console.error('YouTube analiz hatası:', error);
-    res.status(500).json({ error: 'Video analiz edilemedi: ' + error.message });
   }
 });
 
