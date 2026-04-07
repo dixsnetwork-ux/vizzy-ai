@@ -1,16 +1,17 @@
-// index.js - Vizzy AI (YouTube analiz özelliği KALDIRILMIŞTIR, sadece sohbet + görsel)
+// index.js - Backend (admin panel eklendi, /admin route çalışıyor)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const Groq = require('groq-sdk');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const multer = require('multer');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 if (!process.env.GROQ_API_KEY || !process.env.GEMINI_API_KEY) {
-  console.error('❌ GROQ_API_KEY ve GEMINI_API_KEY ortam değişkenleri eksik!');
+  console.error('❌ GROQ_API_KEY ve GEMINI_API_KEY eksik!');
   process.exit(1);
 }
 
@@ -25,14 +26,16 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-// --------------------- In-memory veri yapıları ---------------------
-const userData = new Map();
+// --------------------- Veri yapıları ---------------------
+const userData = new Map(); // userId -> { conversations, settings, name }
+const allMessages = []; // { userId, userName, role, content, timestamp, convId }
 
 function getUserData(userId) {
   if (!userData.has(userId)) {
     userData.set(userId, {
       conversations: new Map(),
       nextId: 1,
+      name: null,
       settings: { personalityPrompt: 'Sen Vizzy AI, arkadaş canlısı bir asistansın. Her cevabında mutlaka uygun bir emoji kullan. 😊 Selam kanka diyene "Selam kanka! 😎" de. Türkçe konuş, samimi ol.' }
     });
   }
@@ -52,7 +55,6 @@ function getConversation(userId, convId) {
   return getUserData(userId).conversations.get(convId);
 }
 
-// --------------------- Başlık üretme (basit stop-word) ---------------------
 function generateChatTitle(message) {
   let clean = message.toLowerCase().replace(/[.,!?;:"'()]/g, '');
   const stopWords = new Set([
@@ -80,9 +82,14 @@ async function updateConversation(userId, convId, userMsg, assistantMsg, imageUr
   const conv = getConversation(userId, convId);
   if (!conv) return null;
   const content = imageUrl ? `[Resim: ${imageUrl}]\n${userMsg}` : userMsg;
-  conv.messages.push({ role: 'user', content });
+  conv.messages.push({ role: 'user', content: userMsg });
   conv.messages.push({ role: 'assistant', content: assistantMsg });
   conv.updatedAt = new Date().toISOString();
+
+  // Tüm mesajları global diziye ekle
+  const userName = getUserData(userId).name || 'Anonim';
+  allMessages.push({ userId, userName, role: 'user', content: userMsg, timestamp: new Date().toISOString(), convId });
+  allMessages.push({ userId, userName, role: 'assistant', content: assistantMsg, timestamp: new Date().toISOString(), convId });
 
   if (conv.messages.length === 2 && conv.title === 'Yeni Sohbet') {
     const newTitle = generateChatTitle(userMsg);
@@ -112,7 +119,6 @@ function truncateHistory(messages, maxTokens) {
   return truncated;
 }
 
-// --------------------- AI çağrıları (Groq + Gemini fallback) ---------------------
 async function callAIWithFallback(userId, conv, userMessage, res) {
   const personality = getUserData(userId).settings.personalityPrompt;
   const recent = conv.messages.slice(-15);
@@ -188,7 +194,7 @@ async function callVision(userId, conv, userMessage, imageBase64, res) {
   }
 }
 
-// --------------------- Rate limiting ve queue ---------------------
+// Rate limiting ve queue (kısa tutuldu)
 const rateStore = new Map();
 function rateLimit(ip, userId) {
   const key = `${ip}_${userId}`;
@@ -298,6 +304,21 @@ app.put('/api/settings', (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/user/name', (req, res) => {
+  const { userId, name } = req.body;
+  if (!userId || !name) return res.status(400).json({ error: 'userId and name required' });
+  const user = getUserData(userId);
+  user.name = name;
+  res.json({ success: true, name });
+});
+
+app.get('/api/user/name', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const user = getUserData(userId);
+  res.json({ name: user.name || null });
+});
+
 app.post('/api/chat/:convId', async (req, res) => {
   const { message, userId } = req.body;
   const { convId } = req.params;
@@ -350,6 +371,146 @@ app.post('/api/vision/:convId', upload.single('image'), async (req, res) => {
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: 'Görsel işlenirken hata oluştu.' });
   }
+});
+
+// Admin panel API'leri
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body;
+  if (password === '991') {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ error: 'Şifre yanlış' });
+  }
+});
+
+app.get('/api/admin/messages', (req, res) => {
+  const auth = req.headers.authorization;
+  if (auth !== 'Bearer admin_991') {
+    return res.status(401).json({ error: 'Yetkisiz' });
+  }
+  const sorted = [...allMessages].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+  res.json(sorted);
+});
+
+// --------------------- ADMIN SAYFASI (GET /admin) ---------------------
+app.get('/admin', (req, res) => {
+  const html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vizzy AI - Admin Paneli</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #1e1f22; color: #ececf1; padding: 20px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { margin-bottom: 20px; color: #10a37f; }
+    .login-box { background: #2c2d31; padding: 30px; border-radius: 20px; max-width: 400px; margin: 100px auto; text-align: center; }
+    .login-box input { width: 100%; padding: 12px; margin: 15px 0; border-radius: 40px; border: none; background: #1e1f22; color: white; font-size: 1rem; }
+    .login-box button { background: #10a37f; color: white; border: none; padding: 12px 32px; border-radius: 40px; cursor: pointer; font-size: 1rem; }
+    .messages-table { width: 100%; border-collapse: collapse; background: #2c2d31; border-radius: 16px; overflow: hidden; }
+    .messages-table th, .messages-table td { padding: 12px; text-align: left; border-bottom: 1px solid #3c3d41; }
+    .messages-table th { background: #10a37f; color: white; }
+    .user-row { background: #1e1f22; }
+    .assistant-row { background: #2c2d31; }
+    .timestamp { font-size: 0.8rem; color: #aaa; }
+    .error { color: #c72a2a; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div class="container" id="app">
+  <div id="loginPanel" class="login-box">
+    <h2>Admin Girişi</h2>
+    <input type="password" id="passwordInput" placeholder="Şifre">
+    <button id="loginBtn">Giriş Yap</button>
+    <div id="loginError" class="error"></div>
+  </div>
+  <div id="adminPanel" style="display:none;">
+    <h1>Vizzy AI - Tüm Mesajlar</h1>
+    <div style="overflow-x: auto;">
+      <table class="messages-table" id="messagesTable">
+        <thead>
+          <tr><th>Kullanıcı ID</th><th>Kullanıcı Adı</th><th>Rol</th><th>Mesaj</th><th>Zaman</th></tr>
+        </thead>
+        <tbody id="messagesBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+  const loginPanel = document.getElementById('loginPanel');
+  const adminPanel = document.getElementById('adminPanel');
+  const passwordInput = document.getElementById('passwordInput');
+  const loginBtn = document.getElementById('loginBtn');
+  const loginError = document.getElementById('loginError');
+  const messagesBody = document.getElementById('messagesBody');
+
+  async function login() {
+    const password = passwordInput.value.trim();
+    if (!password) return;
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem('admin_token', 'admin_991');
+        loadMessages();
+        loginPanel.style.display = 'none';
+        adminPanel.style.display = 'block';
+      } else {
+        loginError.innerText = 'Şifre yanlış!';
+      }
+    } catch (err) {
+      loginError.innerText = 'Bağlantı hatası';
+    }
+  }
+
+  async function loadMessages() {
+    try {
+      const res = await fetch('/api/admin/messages', {
+        headers: { 'Authorization': 'Bearer admin_991' }
+      });
+      if (!res.ok) throw new Error('Yetkisiz');
+      const messages = await res.json();
+      messagesBody.innerHTML = '';
+      for (const msg of messages) {
+        const row = document.createElement('tr');
+        row.className = msg.role === 'user' ? 'user-row' : 'assistant-row';
+        row.innerHTML = \`
+          <td>\${escapeHtml(msg.userId)}</td>
+          <td>\${escapeHtml(msg.userName)}</td>
+          <td>\${msg.role === 'user' ? '👤 Kullanıcı' : '🤖 Bot'}</td>
+          <td>\${escapeHtml(msg.content)}</td>
+          <td class="timestamp">\${new Date(msg.timestamp).toLocaleString('tr-TR')}</td>
+        \`;
+        messagesBody.appendChild(row);
+      }
+    } catch (err) {
+      console.error(err);
+      messagesBody.innerHTML = '<tr><td colspan="5">Mesajlar yüklenemedi</td></tr>';
+    }
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
+  }
+
+  loginBtn.onclick = login;
+  passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') login(); });
+
+  // Oturum kontrolü
+  if (localStorage.getItem('admin_token') === 'admin_991') {
+    loginPanel.style.display = 'none';
+    adminPanel.style.display = 'block';
+    loadMessages();
+  }
+</script>
+</body>
+</html>`;
+  res.send(html);
 });
 
 app.get('/health', (req, res) => res.send('OK'));
