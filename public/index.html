@@ -1,41 +1,42 @@
-<!-- public/index.html - YouTube özelliği tamamen kaldırılmış, sadece sohbet + görsel -->
+<!-- public/index.html - Chat arayüzü (localStorage "messages" anahtarına kaydeder) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-  <title>Vizzy AI – Akıllı Asistan</title>
+  <title>Vizzy AI – Sohbet</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body { height: 100%; overflow: hidden; position: fixed; width: 100%; }
-    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #1e1f22; }
-    .app { display: flex; height: 100%; width: 100%; position: relative; }
-    .sidebar { width: 280px; background: #111214; color: #ececf1; display: flex; flex-direction: column; border-right: 1px solid #2c2d31; transition: transform 0.25s ease; z-index: 1000; flex-shrink: 0; }
-    @media (max-width: 768px) { .sidebar { position: fixed; top: 0; left: 0; height: 100%; transform: translateX(-100%); box-shadow: 2px 0 12px rgba(0,0,0,0.4); } .sidebar.open { transform: translateX(0); } }
+    html, body { height: 100%; overflow: hidden; position: fixed; width: 100%; background: #1e1f22; font-family: system-ui, sans-serif; }
+    .name-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+    .name-modal input { padding: 16px; font-size: 1.2rem; border-radius: 60px; border: none; width: 80%; max-width: 300px; margin: 20px; background: #2c2d31; color: white; text-align: center; }
+    .name-modal button { background: #10a37f; color: white; border: none; padding: 12px 32px; border-radius: 40px; font-size: 1.1rem; cursor: pointer; }
+    .app { display: flex; height: 100%; width: 100%; }
+    .sidebar { width: 280px; background: #111214; color: #ececf1; display: flex; flex-direction: column; border-right: 1px solid #2c2d31; transition: transform 0.25s; z-index: 1000; }
+    @media (max-width: 768px) { .sidebar { position: fixed; left: 0; top: 0; height: 100%; transform: translateX(-100%); } .sidebar.open { transform: translateX(0); } }
     .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; backdrop-filter: blur(2px); }
     .sidebar-overlay.active { display: block; }
     .sidebar-header { padding: 20px 16px; border-bottom: 1px solid #2c2d31; }
-    .new-chat-btn, .settings-btn { width: 100%; background: #10a37f; color: white; border: none; padding: 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; transition: 0.2s; min-height: 48px; }
+    .new-chat-btn, .settings-btn { width: 100%; background: #10a37f; color: white; border: none; padding: 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; min-height: 48px; }
     .settings-btn { background: #2c2d31; margin-bottom: 0; }
-    .new-chat-btn:active, .settings-btn:active { transform: scale(0.97); }
     .conversations-list { flex: 1; overflow-y: auto; padding: 12px; }
-    .conv-item { padding: 12px; border-radius: 10px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: transparent; transition: all 0.1s; color: #b5b5c3; min-height: 48px; }
+    .conv-item { padding: 12px; border-radius: 10px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: transparent; color: #b5b5c3; min-height: 48px; }
     .conv-item:hover { background: #2c2d31; }
     .conv-item.active { background: #2c2d31; color: white; box-shadow: 0 0 0 1px #10a37f; position: relative; }
-    .conv-item.active::after { content: ''; position: absolute; left: 0; top: 10%; height: 80%; width: 3px; background: #10a37f; border-radius: 0 2px 2px 0; }
+    .conv-item.active::after { content: ''; position: absolute; left: 0; top: 10%; height: 80%; width: 3px; background: #10a37f; }
     .conv-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; pointer-events: none; }
-    .conv-actions { display: none; gap: 8px; } .conv-item:hover .conv-actions { display: flex; }
-    .conv-actions button { background: none; border: none; color: #aaa; cursor: pointer; font-size: 0.9rem; padding: 8px; min-width: 36px; }
+    .conv-actions { display: none; gap: 8px; }
+    .conv-item:hover .conv-actions { display: flex; }
+    .conv-actions button { background: none; border: none; color: #aaa; cursor: pointer; font-size: 0.9rem; padding: 8px; }
     .main { flex: 1; display: flex; flex-direction: column; background: #1e1f22; min-width: 0; height: 100%; overflow: hidden; }
-    .chat-header { padding: 12px 20px; border-bottom: 1px solid #2c2d31; color: white; font-weight: 500; background: #1e1f22; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+    .chat-header { padding: 12px 20px; border-bottom: 1px solid #2c2d31; color: white; display: flex; align-items: center; gap: 16px; background: #1e1f22; }
     .menu-icon { font-size: 1.8rem; cursor: pointer; color: white; display: none; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: 12px; }
-    .menu-icon:active { background: #2c2d31; }
     @media (max-width: 768px) { .menu-icon { display: flex; } }
-    .messages-container { flex: 1; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+    .messages-container { flex: 1; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
     .welcome-message { text-align: center; color: #ececf1; margin: 40px 16px; }
-    .welcome-message i { font-size: 64px; color: #10a37f; margin-bottom: 16px; display: block; }
-    .message { display: flex; gap: 12px; max-width: 100%; animation: fadeIn 0.2s ease; }
+    .welcome-message i { font-size: 64px; color: #10a37f; display: block; margin-bottom: 16px; }
+    .message { display: flex; gap: 12px; max-width: 100%; animation: fadeIn 0.2s; }
     .message.user { flex-direction: row-reverse; }
     .message-avatar { width: 40px; height: 40px; border-radius: 50%; background: #2c2d31; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
     .user .message-avatar { background: #10a37f; }
@@ -46,35 +47,37 @@
     .image-preview-small { max-width: 160px; max-height: 140px; border-radius: 12px; margin-bottom: 8px; display: block; }
     .typing-indicator { display: flex; gap: 5px; padding: 12px 16px; background: #2c2d31; width: fit-content; border-radius: 24px; }
     .typing-indicator span { width: 8px; height: 8px; background: #aaa; border-radius: 50%; animation: blink 1.4s infinite; }
-    .input-area { background: #1e1f22; padding: 12px 16px 20px; border-top: 1px solid #2c2d31; flex-shrink: 0; }
+    .input-area { background: #1e1f22; padding: 12px 16px 20px; border-top: 1px solid #2c2d31; }
     .input-wrapper { background: #2c2d31; border-radius: 32px; padding: 6px 12px; display: flex; align-items: flex-end; gap: 10px; }
-    textarea { flex: 1; background: transparent; border: none; color: white; font-size: 1rem; resize: none; outline: none; font-family: inherit; max-height: 110px; padding: 10px 4px; line-height: 1.4; }
-    textarea::placeholder { color: #8e8e9e; }
-    .icon-btn, .send-btn { background: transparent; border: none; color: #ccc; cursor: pointer; width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; transition: 0.2s; font-size: 1.5rem; flex-shrink: 0; }
+    textarea { flex: 1; background: transparent; border: none; color: white; font-size: 1rem; resize: none; outline: none; font-family: inherit; max-height: 110px; padding: 10px 4px; }
+    .icon-btn, .send-btn { background: transparent; border: none; color: #ccc; cursor: pointer; width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 1.5rem; }
     .send-btn { background: #10a37f; color: white; }
-    .icon-btn:active, .send-btn:active { transform: scale(0.94); background: #40414f; }
-    .send-btn:active { background: #1a7f64; }
-    .send-btn:disabled { opacity: 0.5; transform: none; }
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; justify-content: center; align-items: center; }
     .modal.active { display: flex; }
-    .modal-content { background: #1e1f22; border-radius: 28px; width: 90%; max-width: 420px; padding: 24px; border: 1px solid #3c3d41; }
-    .modal-content textarea { width: 100%; background: #2c2d31; border: 1px solid #4a4b55; border-radius: 16px; padding: 12px; color: white; margin: 16px 0; }
+    .modal-content { background: #1e1f22; border-radius: 28px; width: 90%; max-width: 420px; padding: 24px; }
+    .modal-content textarea { width: 100%; background: #2c2d31; border-radius: 16px; padding: 12px; color: white; margin: 16px 0; border: none; }
     .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; }
-    .save-btn, .cancel-btn { padding: 10px 20px; border-radius: 40px; font-weight: 500; cursor: pointer; border: none; }
+    .save-btn, .cancel-btn { padding: 10px 20px; border-radius: 40px; border: none; cursor: pointer; }
     .save-btn { background: #10a37f; color: white; }
     .cancel-btn { background: #2c2d31; color: white; }
     .image-preview-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); z-index: 3000; display: none; justify-content: center; align-items: center; flex-direction: column; }
     .image-preview-modal.active { display: flex; }
     .image-preview-modal img { max-width: 90%; max-height: 55%; border-radius: 20px; margin-bottom: 20px; }
-    .image-preview-modal textarea { width: 80%; padding: 14px; border-radius: 40px; background: #2c2d31; color: white; border: none; font-size: 1rem; }
-    .image-preview-modal button { margin-top: 20px; background: #10a37f; border: none; padding: 12px 32px; border-radius: 40px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; }
-    .error-toast { position: fixed; bottom: 80px; left: 16px; right: 16px; background: #c72a2a; color: white; padding: 12px 20px; border-radius: 60px; text-align: center; z-index: 1100; font-size: 0.9rem; }
+    .image-preview-modal textarea { width: 80%; padding: 14px; border-radius: 40px; background: #2c2d31; color: white; border: none; }
+    .image-preview-modal button { margin-top: 20px; background: #10a37f; border: none; padding: 12px 32px; border-radius: 40px; color: white; cursor: pointer; }
+    .error-toast { position: fixed; bottom: 80px; left: 16px; right: 16px; background: #c72a2a; color: white; padding: 12px 20px; border-radius: 60px; text-align: center; z-index: 1100; }
     @keyframes blink { 0%,60%,100% { opacity: 0.4; transform: scale(0.8);} 30% { opacity: 1; transform: scale(1.2);} }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
   </style>
 </head>
 <body>
-<div class="app">
+<div id="nameModal" class="name-modal">
+  <h2 style="color:white;">Hoş geldiniz 👋</h2>
+  <input type="text" id="userNameInput" placeholder="Adınızı girin" autocomplete="off">
+  <button id="saveNameBtn">Sohbete Başla</button>
+</div>
+
+<div class="app" id="app" style="display:none;">
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
@@ -115,8 +118,8 @@
 
 <div class="modal" id="settingsModal">
   <div class="modal-content">
-    <h3><i class="fas fa-robot"></i> Bot Kişilik Ayarları</h3>
-    <textarea id="personalityPrompt" rows="5" placeholder="Örn: Sen komik, şakacı bir asistansın. Her cevapta emoji kullan."></textarea>
+    <h3 style="color:white;"><i class="fas fa-robot"></i> Bot Kişilik Ayarları</h3>
+    <textarea id="personalityPrompt" rows="5"></textarea>
     <div class="modal-buttons">
       <button class="cancel-btn" id="cancelSettingsBtn">İptal</button>
       <button class="save-btn" id="saveSettingsBtn">Kaydet</button>
@@ -126,68 +129,320 @@
 
 <script>
   (function() {
-    const userId = localStorage.getItem('vizzy_user_id') || (() => {
-      const id = 'user_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('vizzy_user_id', id);
-      return id;
-    })();
+    // --- GLOBAL LOCALSTORAGE MESSAGES YÖNETİMİ ---
+    const MESSAGES_KEY = "messages";
+
+    function getMessages() {
+      const stored = localStorage.getItem(MESSAGES_KEY);
+      if (!stored) return [];
+      try {
+        return JSON.parse(stored);
+      } catch(e) {
+        return [];
+      }
+    }
+
+    function addMessage(user, text, role) {
+      const messages = getMessages();
+      messages.push({
+        user: user,
+        text: text,
+        role: role,      // "user" veya "assistant"
+        time: Date.now()
+      });
+      localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+      // Storage event'i tetikle (diğer sekmedeki admin panel için)
+      window.dispatchEvent(new StorageEvent('storage', { key: MESSAGES_KEY, newValue: JSON.stringify(messages) }));
+    }
+
+    // --- KULLANICI ADI ---
+    let userId = localStorage.getItem('vizzy_user_id');
+    if (!userId) {
+      userId = 'user_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('vizzy_user_id', userId);
+    }
     let currentConvId = localStorage.getItem('vizzy_current_conv');
     let conversations = [];
     let currentMessages = [];
     let isLoading = false;
     let pendingImageFile = null;
+    let userName = null;
 
-    const sidebar = document.getElementById('sidebar');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-    const menuToggle = document.getElementById('menuToggle');
-    const convListDiv = document.getElementById('conversationsList');
-    const messagesListDiv = document.getElementById('messagesList');
-    const welcomeDiv = document.getElementById('welcomeMessage');
-    const chatHeaderSpan = document.querySelector('.chat-header span');
-    const inputEl = document.getElementById('messageInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const newChatBtn = document.getElementById('newChatBtn');
-    const settingsBtn = document.getElementById('settingsBtn');
-    const settingsModal = document.getElementById('settingsModal');
-    const personalityTextarea = document.getElementById('personalityPrompt');
-    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-    const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
-    const imageBtn = document.getElementById('imageBtn');
-    const imageUpload = document.getElementById('imageUpload');
-    const imagePreviewModal = document.getElementById('imagePreviewModal');
-    const previewImg = document.getElementById('previewImg');
-    const previewCaption = document.getElementById('previewCaption');
-    const sendImageBtn = document.getElementById('sendImageBtn');
-    const messagesContainer = document.getElementById('messagesContainer');
+    // Name modal
+    const nameModal = document.getElementById('nameModal');
+    const userNameInput = document.getElementById('userNameInput');
+    const saveNameBtn = document.getElementById('saveNameBtn');
+    const appDiv = document.getElementById('app');
 
-    function scrollToBottom() { if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight; }
-    function safeScrollToBottom() { Promise.resolve().then(() => scrollToBottom()); }
+    async function saveUserName(name) {
+      userName = name;
+      localStorage.setItem('vizzy_user_name', name);
+      nameModal.style.display = 'none';
+      appDiv.style.display = 'flex';
+      initApp();
+    }
 
-    function closeSidebar() { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
-    function openSidebar() { sidebar.classList.add('open'); sidebarOverlay.classList.add('active'); }
-    menuToggle?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (sidebar.classList.contains('open')) closeSidebar(); else openSidebar(); });
-    sidebarOverlay?.addEventListener('click', closeSidebar);
+    saveNameBtn.onclick = () => {
+      const name = userNameInput.value.trim();
+      if (name.length < 2) {
+        alert('Lütfen en az 2 karakterli bir ad girin.');
+        return;
+      }
+      saveUserName(name);
+    };
+    userNameInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') saveNameBtn.click(); });
 
-    async function fetchConversations() { try { const res = await fetch(`/api/conversations?userId=${userId}`); if (res.ok) { conversations = await res.json(); renderConversations(); } } catch (e) { console.warn(e); } }
-    async function createConversation(title = 'Yeni Sohbet') { try { const res = await fetch('/api/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, title }) }); if (res.ok) { const newConv = await res.json(); conversations.unshift(newConv); renderConversations(); return newConv.id; } } catch (e) { console.warn(e); } return null; }
-    async function deleteConversation(convId) { await fetch(`/api/conversations/${convId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) }); conversations = conversations.filter(c => c.id !== convId); if (currentConvId === convId) { if (conversations.length) loadConversation(conversations[0].id); else startNewChat(); } renderConversations(); }
-    async function renameConversation(convId, newTitle) { await fetch(`/api/conversations/${convId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, title: newTitle }) }); const conv = conversations.find(c => c.id === convId); if (conv) conv.title = newTitle; renderConversations(); if (currentConvId === convId) chatHeaderSpan.innerHTML = `<i class="fas fa-robot"></i> ${escapeHtml(newTitle)}`; }
-    async function loadConversation(convId) { if (!convId) return; currentConvId = convId; localStorage.setItem('vizzy_current_conv', convId); try { const res = await fetch(`/api/conversations/${convId}?userId=${userId}`); if (res.ok) { const data = await res.json(); currentMessages = data.messages || []; chatHeaderSpan.innerHTML = `<i class="fas fa-robot"></i> ${escapeHtml(data.title || 'Sohbet')}`; renderMessages(); safeScrollToBottom(); } } catch (e) { console.warn(e); } renderConversations(); }
-    async function startNewChat() { const newId = await createConversation('Yeni Sohbet'); if (newId) { await loadConversation(newId); if (window.innerWidth <= 768) closeSidebar(); } }
-    async function loadSettings() { const res = await fetch(`/api/settings?userId=${userId}`); if (res.ok) { const data = await res.json(); personalityTextarea.value = data.personalityPrompt; } }
-    async function saveSettings() { await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, personalityPrompt: personalityTextarea.value }) }); settingsModal.classList.remove('active'); showToast('✅ Kişilik kaydedildi'); }
-    function renderConversations() { convListDiv.innerHTML = ''; for (const conv of conversations) { const div = document.createElement('div'); div.className = `conv-item ${currentConvId === conv.id ? 'active' : ''}`; div.setAttribute('data-id', conv.id); div.innerHTML = `<span class="conv-title"><i class="fas fa-comment"></i> ${escapeHtml(conv.title)}</span><div class="conv-actions"><button class="rename-conv" data-id="${conv.id}"><i class="fas fa-pen"></i></button><button class="delete-conv" data-id="${conv.id}"><i class="fas fa-trash"></i></button></div>`; convListDiv.appendChild(div); } }
-    convListDiv.addEventListener('click', (e) => { const target = e.target; const convItem = target.closest('.conv-item'); if (!convItem) return; const convId = convItem.getAttribute('data-id'); if (target.classList.contains('rename-conv') || target.closest('.rename-conv')) { e.stopPropagation(); const conv = conversations.find(c => c.id === convId); if (conv) { const newTitle = prompt('Yeni başlık:', conv.title); if (newTitle && newTitle.trim()) renameConversation(convId, newTitle.trim()); } return; } if (target.classList.contains('delete-conv') || target.closest('.delete-conv')) { e.stopPropagation(); if (confirm('Bu sohbet silinsin mi?')) deleteConversation(convId); return; } if (convId && convId !== currentConvId) { loadConversation(convId); if (window.innerWidth <= 768) closeSidebar(); } });
-    function renderMessages() { messagesListDiv.innerHTML = ''; if (currentMessages.length === 0) { welcomeDiv.style.display = 'block'; return; } welcomeDiv.style.display = 'none'; for (const msg of currentMessages) { const imageMatch = msg.content.match(/^\[Resim: ([^\]]+)\]\n?(.*)/); if (imageMatch) addMessageToDOM(imageMatch[2], msg.role, imageMatch[1]); else addMessageToDOM(msg.content, msg.role); } safeScrollToBottom(); }
-    function addMessageToDOM(text, role, imageUrl = null) { const div = document.createElement('div'); div.className = `message ${role}`; const avatar = document.createElement('div'); avatar.className = 'message-avatar'; avatar.innerHTML = role === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>'; const content = document.createElement('div'); content.className = 'message-content'; if (imageUrl) { const img = document.createElement('img'); img.src = imageUrl; img.className = 'image-preview-small'; content.appendChild(img); } if (text) content.appendChild(document.createTextNode(text)); div.appendChild(avatar); div.appendChild(content); messagesListDiv.appendChild(div); safeScrollToBottom(); }
-    function showTyping() { removeTyping(); const typing = document.createElement('div'); typing.className = 'message assistant'; typing.id = 'typing-indicator'; typing.innerHTML = `<div class="message-avatar"><i class="fas fa-robot"></i></div><div class="typing-indicator"><span></span><span></span><span></span></div>`; messagesListDiv.appendChild(typing); safeScrollToBottom(); }
-    function removeTyping() { const el = document.getElementById('typing-indicator'); if (el) el.remove(); }
-    function showToast(msg) { const toast = document.createElement('div'); toast.className = 'error-toast'; toast.innerText = msg; document.body.appendChild(toast); setTimeout(() => toast.remove(), 3000); }
-    function escapeHtml(str) { return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'); }
-    async function sendTextMessage(message) { if (!message.trim() || isLoading || !currentConvId) return; currentMessages.push({ role: 'user', content: message }); addMessageToDOM(message, 'user'); inputEl.value = ''; inputEl.style.height = 'auto'; isLoading = true; sendBtn.disabled = true; showTyping(); try { const res = await fetch(`/api/chat/${currentConvId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, userId }) }); if (!res.ok) throw new Error('Sunucu hatası'); const reader = res.body.getReader(); const decoder = new TextDecoder(); let full = ''; let assistantDiv = null; removeTyping(); while (true) { const { done, value } = await reader.read(); if (done) break; const chunk = decoder.decode(value); full += chunk; if (!assistantDiv) { const msgDiv = document.createElement('div'); msgDiv.className = 'message assistant'; const av = document.createElement('div'); av.className = 'message-avatar'; av.innerHTML = '<i class="fas fa-robot"></i>'; const cont = document.createElement('div'); cont.className = 'message-content'; msgDiv.appendChild(av); msgDiv.appendChild(cont); messagesListDiv.appendChild(msgDiv); assistantDiv = cont; } assistantDiv.innerText = full; scrollToBottom(); } currentMessages.push({ role: 'assistant', content: full }); await loadConversation(currentConvId); await fetchConversations(); } catch (e) { removeTyping(); showToast(e.message); } finally { isLoading = false; sendBtn.disabled = false; inputEl.focus(); } }
-    async function sendImageWithCaption(imageFile, caption) { if (!imageFile || !currentConvId) return; const formData = new FormData(); formData.append('image', imageFile); formData.append('message', caption || ''); formData.append('userId', userId); const imageUrl = URL.createObjectURL(imageFile); currentMessages.push({ role: 'user', content: `[Resim: ${imageUrl}]\n${caption || ''}` }); addMessageToDOM(caption || '', 'user', imageUrl); isLoading = true; sendBtn.disabled = true; showTyping(); try { const res = await fetch(`/api/vision/${currentConvId}`, { method: 'POST', body: formData }); if (!res.ok) throw new Error('Görsel işlenemedi'); const reader = res.body.getReader(); const decoder = new TextDecoder(); let full = ''; let assistantDiv = null; removeTyping(); while (true) { const { done, value } = await reader.read(); if (done) break; const chunk = decoder.decode(value); full += chunk; if (!assistantDiv) { const msgDiv = document.createElement('div'); msgDiv.className = 'message assistant'; const av = document.createElement('div'); av.className = 'message-avatar'; av.innerHTML = '<i class="fas fa-robot"></i>'; const cont = document.createElement('div'); cont.className = 'message-content'; msgDiv.appendChild(av); msgDiv.appendChild(cont); messagesListDiv.appendChild(msgDiv); assistantDiv = cont; } assistantDiv.innerText = full; scrollToBottom(); } currentMessages.push({ role: 'assistant', content: full }); await loadConversation(currentConvId); await fetchConversations(); } catch (e) { removeTyping(); showToast(e.message); } finally { isLoading = false; sendBtn.disabled = false; inputEl.focus(); } }
-    imageBtn?.addEventListener('click', () => imageUpload.click()); imageUpload?.addEventListener('change', (e) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onload = (ev) => { previewImg.src = ev.target.result; previewCaption.value = ''; imagePreviewModal.classList.add('active'); pendingImageFile = file; }; reader.readAsDataURL(file); } imageUpload.value = ''; }); sendImageBtn?.addEventListener('click', () => { if (pendingImageFile) { sendImageWithCaption(pendingImageFile, previewCaption.value.trim()); imagePreviewModal.classList.remove('active'); pendingImageFile = null; } }); imagePreviewModal?.addEventListener('click', (e) => { if (e.target === imagePreviewModal) imagePreviewModal.classList.remove('active'); }); inputEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const msg = inputEl.value.trim(); if (msg) sendTextMessage(msg); } }); sendBtn?.addEventListener('click', () => { const msg = inputEl.value.trim(); if (msg) sendTextMessage(msg); }); newChatBtn?.addEventListener('click', async () => { await startNewChat(); await fetchConversations(); }); settingsBtn?.addEventListener('click', async () => { await loadSettings(); settingsModal.classList.add('active'); }); saveSettingsBtn?.addEventListener('click', saveSettings); cancelSettingsBtn?.addEventListener('click', () => settingsModal.classList.remove('active')); inputEl?.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 110) + 'px'; }); inputEl?.addEventListener('focus', () => { setTimeout(() => safeScrollToBottom(), 100); });
-    (async () => { await fetchConversations(); if (currentConvId && conversations.some(c => c.id === currentConvId)) { await loadConversation(currentConvId); } else if (conversations.length) { await loadConversation(conversations[0].id); } else { await startNewChat(); } inputEl?.focus(); safeScrollToBottom(); })();
+    const savedName = localStorage.getItem('vizzy_user_name');
+    if (savedName) {
+      userName = savedName;
+      nameModal.style.display = 'none';
+      appDiv.style.display = 'flex';
+      initApp();
+    } else {
+      nameModal.style.display = 'flex';
+      appDiv.style.display = 'none';
+    }
+
+    // --- CHAT UYGULAMASI (MEVCUT KOD + localStorage messages ekleme) ---
+    async function initApp() {
+      const sidebar = document.getElementById('sidebar');
+      const sidebarOverlay = document.getElementById('sidebarOverlay');
+      const menuToggle = document.getElementById('menuToggle');
+      const convListDiv = document.getElementById('conversationsList');
+      const messagesListDiv = document.getElementById('messagesList');
+      const welcomeDiv = document.getElementById('welcomeMessage');
+      const chatHeaderSpan = document.querySelector('.chat-header span');
+      const inputEl = document.getElementById('messageInput');
+      const sendBtn = document.getElementById('sendBtn');
+      const newChatBtn = document.getElementById('newChatBtn');
+      const settingsBtn = document.getElementById('settingsBtn');
+      const settingsModal = document.getElementById('settingsModal');
+      const personalityTextarea = document.getElementById('personalityPrompt');
+      const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+      const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
+      const imageBtn = document.getElementById('imageBtn');
+      const imageUpload = document.getElementById('imageUpload');
+      const imagePreviewModal = document.getElementById('imagePreviewModal');
+      const previewImg = document.getElementById('previewImg');
+      const previewCaption = document.getElementById('previewCaption');
+      const sendImageBtn = document.getElementById('sendImageBtn');
+      const messagesContainer = document.getElementById('messagesContainer');
+
+      function scrollToBottom() { if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight; }
+      function safeScrollToBottom() { Promise.resolve().then(() => scrollToBottom()); }
+      function closeSidebar() { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+      function openSidebar() { sidebar.classList.add('open'); sidebarOverlay.classList.add('active'); }
+      menuToggle?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (sidebar.classList.contains('open')) closeSidebar(); else openSidebar(); });
+      sidebarOverlay?.addEventListener('click', closeSidebar);
+
+      async function fetchConversations() {
+        try { const res = await fetch(`/api/conversations?userId=${userId}`); if (res.ok) { conversations = await res.json(); renderConversations(); } } catch(e) { console.warn(e); }
+      }
+      async function createConversation(title = 'Yeni Sohbet') {
+        try { const res = await fetch('/api/conversations', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, title }) }); if (res.ok) { const newConv = await res.json(); conversations.unshift(newConv); renderConversations(); return newConv.id; } } catch(e) { console.warn(e); } return null;
+      }
+      async function deleteConversation(convId) {
+        await fetch(`/api/conversations/${convId}`, { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId }) });
+        conversations = conversations.filter(c => c.id !== convId);
+        if (currentConvId === convId) { if (conversations.length) loadConversation(conversations[0].id); else startNewChat(); }
+        renderConversations();
+      }
+      async function renameConversation(convId, newTitle) {
+        await fetch(`/api/conversations/${convId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, title: newTitle }) });
+        const conv = conversations.find(c => c.id === convId); if (conv) conv.title = newTitle; renderConversations();
+        if (currentConvId === convId) chatHeaderSpan.innerHTML = `<i class="fas fa-robot"></i> ${escapeHtml(newTitle)}`;
+      }
+      async function loadConversation(convId) {
+        if (!convId) return; currentConvId = convId; localStorage.setItem('vizzy_current_conv', convId);
+        try { const res = await fetch(`/api/conversations/${convId}?userId=${userId}`); if (res.ok) { const data = await res.json(); currentMessages = data.messages || []; chatHeaderSpan.innerHTML = `<i class="fas fa-robot"></i> ${escapeHtml(data.title || 'Sohbet')}`; renderMessages(); safeScrollToBottom(); } } catch(e) { console.warn(e); } renderConversations();
+      }
+      async function startNewChat() { const newId = await createConversation('Yeni Sohbet'); if (newId) { await loadConversation(newId); if (window.innerWidth <= 768) closeSidebar(); } }
+      async function loadSettings() { try { const res = await fetch(`/api/settings?userId=${userId}`); if (res.ok) { const data = await res.json(); personalityTextarea.value = data.personalityPrompt; } } catch(e) { console.warn(e); } }
+      async function saveSettings() { await fetch('/api/settings', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, personalityPrompt: personalityTextarea.value }) }); settingsModal.classList.remove('active'); showToast('✅ Kişilik kaydedildi'); }
+      function renderConversations() { convListDiv.innerHTML = ''; for (const conv of conversations) { const div = document.createElement('div'); div.className = `conv-item ${currentConvId === conv.id ? 'active' : ''}`; div.setAttribute('data-id', conv.id); div.innerHTML = `<span class="conv-title"><i class="fas fa-comment"></i> ${escapeHtml(conv.title)}</span><div class="conv-actions"><button class="rename-conv"><i class="fas fa-pen"></i></button><button class="delete-conv"><i class="fas fa-trash"></i></button></div>`; convListDiv.appendChild(div); } }
+      convListDiv.addEventListener('click', (e) => { const target = e.target; const convItem = target.closest('.conv-item'); if (!convItem) return; const convId = convItem.getAttribute('data-id'); if (target.classList.contains('rename-conv') || target.closest('.rename-conv')) { e.stopPropagation(); const conv = conversations.find(c => c.id === convId); if (conv) { const newTitle = prompt('Yeni başlık:', conv.title); if (newTitle?.trim()) renameConversation(convId, newTitle.trim()); } return; } if (target.classList.contains('delete-conv') || target.closest('.delete-conv')) { e.stopPropagation(); if (confirm('Bu sohbet silinsin mi?')) deleteConversation(convId); return; } if (convId && convId !== currentConvId) { loadConversation(convId); if (window.innerWidth <= 768) closeSidebar(); } });
+      function renderMessages() { messagesListDiv.innerHTML = ''; if (currentMessages.length === 0) { welcomeDiv.style.display = 'block'; return; } welcomeDiv.style.display = 'none'; for (const msg of currentMessages) { const imageMatch = msg.content.match(/^\[Resim: ([^\]]+)\]\n?(.*)/); if (imageMatch) addMessageToDOM(imageMatch[2], msg.role, imageMatch[1]); else addMessageToDOM(msg.content, msg.role); } safeScrollToBottom(); }
+      function addMessageToDOM(text, role, imageUrl = null) { const div = document.createElement('div'); div.className = `message ${role}`; const avatar = document.createElement('div'); avatar.className = 'message-avatar'; avatar.innerHTML = role === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>'; const content = document.createElement('div'); content.className = 'message-content'; if (imageUrl) { const img = document.createElement('img'); img.src = imageUrl; img.className = 'image-preview-small'; content.appendChild(img); } if (text) content.appendChild(document.createTextNode(text)); div.appendChild(avatar); div.appendChild(content); messagesListDiv.appendChild(div); safeScrollToBottom(); }
+      function showTyping() { removeTyping(); const typing = document.createElement('div'); typing.className = 'message assistant'; typing.id = 'typing-indicator'; typing.innerHTML = `<div class="message-avatar"><i class="fas fa-robot"></i></div><div class="typing-indicator"><span></span><span></span><span></span></div>`; messagesListDiv.appendChild(typing); safeScrollToBottom(); }
+      function removeTyping() { const el = document.getElementById('typing-indicator'); if (el) el.remove(); }
+      function showToast(msg) { const toast = document.createElement('div'); toast.className = 'error-toast'; toast.innerText = msg; document.body.appendChild(toast); setTimeout(() => toast.remove(), 3000); }
+      function escapeHtml(str) { return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'); }
+
+      // MESAJ GÖNDERME (text) - localStorage messages ekleme
+      async function sendTextMessage(message) {
+        if (!message.trim() || isLoading || !currentConvId) return;
+        // Kullanıcı mesajını ekle
+        currentMessages.push({ role: 'user', content: message });
+        addMessageToDOM(message, 'user');
+        // localStorage messages'a kaydet
+        addMessage(userName, message, 'user');
+        
+        inputEl.value = ''; inputEl.style.height = 'auto';
+        isLoading = true; sendBtn.disabled = true; showTyping();
+
+        try {
+          const res = await fetch(`/api/chat/${currentConvId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, userId })
+          });
+          if (!res.ok) throw new Error('Sunucu hatası');
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let full = '';
+          let assistantDiv = null;
+          removeTyping();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            full += chunk;
+            if (!assistantDiv) {
+              const msgDiv = document.createElement('div');
+              msgDiv.className = 'message assistant';
+              const av = document.createElement('div');
+              av.className = 'message-avatar';
+              av.innerHTML = '<i class="fas fa-robot"></i>';
+              const cont = document.createElement('div');
+              cont.className = 'message-content';
+              msgDiv.appendChild(av);
+              msgDiv.appendChild(cont);
+              messagesListDiv.appendChild(msgDiv);
+              assistantDiv = cont;
+            }
+            assistantDiv.innerText = full;
+            scrollToBottom();
+          }
+          currentMessages.push({ role: 'assistant', content: full });
+          addMessage(userName, full, 'assistant');  // bot mesajını da kaydet
+          await loadConversation(currentConvId);
+          await fetchConversations();
+        } catch (e) {
+          removeTyping();
+          showToast(e.message);
+        } finally {
+          isLoading = false;
+          sendBtn.disabled = false;
+          inputEl.focus();
+        }
+      }
+
+      async function sendImageWithCaption(imageFile, caption) {
+        if (!imageFile || !currentConvId) return;
+        const formData = new FormData();
+        formData.append('image', imageFile);
+        formData.append('message', caption || '');
+        formData.append('userId', userId);
+        const imageUrl = URL.createObjectURL(imageFile);
+        currentMessages.push({ role: 'user', content: `[Resim: ${imageUrl}]\n${caption || ''}` });
+        addMessageToDOM(caption || '', 'user', imageUrl);
+        addMessage(userName, caption || '📷 Resim gönderildi', 'user');
+        isLoading = true; sendBtn.disabled = true; showTyping();
+        try {
+          const res = await fetch(`/api/vision/${currentConvId}`, { method: 'POST', body: formData });
+          if (!res.ok) throw new Error('Görsel işlenemedi');
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let full = '';
+          let assistantDiv = null;
+          removeTyping();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            full += chunk;
+            if (!assistantDiv) {
+              const msgDiv = document.createElement('div');
+              msgDiv.className = 'message assistant';
+              const av = document.createElement('div');
+              av.className = 'message-avatar';
+              av.innerHTML = '<i class="fas fa-robot"></i>';
+              const cont = document.createElement('div');
+              cont.className = 'message-content';
+              msgDiv.appendChild(av);
+              msgDiv.appendChild(cont);
+              messagesListDiv.appendChild(msgDiv);
+              assistantDiv = cont;
+            }
+            assistantDiv.innerText = full;
+            scrollToBottom();
+          }
+          currentMessages.push({ role: 'assistant', content: full });
+          addMessage(userName, full, 'assistant');
+          await loadConversation(currentConvId);
+          await fetchConversations();
+        } catch (e) {
+          removeTyping();
+          showToast(e.message);
+        } finally {
+          isLoading = false;
+          sendBtn.disabled = false;
+          inputEl.focus();
+        }
+      }
+
+      imageBtn?.addEventListener('click', () => imageUpload.click());
+      imageUpload?.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            previewImg.src = ev.target.result;
+            previewCaption.value = '';
+            imagePreviewModal.classList.add('active');
+            pendingImageFile = file;
+          };
+          reader.readAsDataURL(file);
+        }
+        imageUpload.value = '';
+      });
+      sendImageBtn?.addEventListener('click', () => {
+        if (pendingImageFile) {
+          sendImageWithCaption(pendingImageFile, previewCaption.value.trim());
+          imagePreviewModal.classList.remove('active');
+          pendingImageFile = null;
+        }
+      });
+      imagePreviewModal?.addEventListener('click', (e) => {
+        if (e.target === imagePreviewModal) imagePreviewModal.classList.remove('active');
+      });
+
+      inputEl?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const msg = inputEl.value.trim();
+          if (msg) sendTextMessage(msg);
+        }
+      });
+      sendBtn?.addEventListener('click', () => {
+        const msg = inputEl.value.trim();
+        if (msg) sendTextMessage(msg);
+      });
+      newChatBtn?.addEventListener('click', async () => {
+        await startNewChat();
+        await fetchConversations();
+      });
+      settingsBtn?.addEventListener('click', async () => {
+        await loadSettings();
+        settingsModal.classList.add('active');
+      });
+      saveSettingsBtn?.addEventListener('click', saveSettings);
+      cancelSettingsBtn?.addEventListener('click', () => settingsModal.classList.remove('active'));
+      inputEl?.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 110) + 'px';
+      });
+      inputEl?.addEventListener('focus', () => {
+        setTimeout(() => safeScrollToBottom(), 100);
+      });
+
+      await fetchConversations();
+      if (currentConvId && conversations.some(c => c.id === currentConvId)) await loadConversation(currentConvId);
+      else if (conversations.length) await loadConversation(conversations[0].id);
+      else await startNewChat();
+      inputEl?.focus();
+      safeScrollToBottom();
+    }
   })();
 </script>
 </body>
