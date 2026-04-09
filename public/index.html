@@ -1,4 +1,4 @@
-<!-- public/index.html - Chat arayüzü (localStorage "messages" anahtarına kaydeder) -->
+<!-- public/index.html - Chat arayüzü (localStorage "chat_logs" key'ine kaydeder) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -129,11 +129,11 @@
 
 <script>
   (function() {
-    // --- GLOBAL LOCALSTORAGE MESSAGES YÖNETİMİ ---
-    const MESSAGES_KEY = "messages";
+    // ----- ORTAK LOG SİSTEMİ (localStorage) -----
+    const LOG_KEY = "chat_logs";
 
-    function getMessages() {
-      const stored = localStorage.getItem(MESSAGES_KEY);
+    function getLogs() {
+      const stored = localStorage.getItem(LOG_KEY);
       if (!stored) return [];
       try {
         return JSON.parse(stored);
@@ -142,20 +142,20 @@
       }
     }
 
-    function addMessage(user, text, role) {
-      const messages = getMessages();
-      messages.push({
-        user: user,
+    function addLogEntry(userName, text, role) {
+      const logs = getLogs();
+      logs.push({
+        userName: userName,
         text: text,
-        role: role,      // "user" veya "assistant"
-        time: Date.now()
+        role: role,      // "user" veya "bot"
+        timestamp: Date.now()
       });
-      localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
-      // Storage event'i tetikle (diğer sekmedeki admin panel için)
-      window.dispatchEvent(new StorageEvent('storage', { key: MESSAGES_KEY, newValue: JSON.stringify(messages) }));
+      localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+      // Storage event'ini manuel tetikle (diğer sekmedeki admin panel için)
+      window.dispatchEvent(new StorageEvent('storage', { key: LOG_KEY, newValue: JSON.stringify(logs) }));
     }
 
-    // --- KULLANICI ADI ---
+    // ----- KULLANICI ADI VE ID -----
     let userId = localStorage.getItem('vizzy_user_id');
     if (!userId) {
       userId = 'user_' + Math.random().toString(36).substr(2, 9);
@@ -203,7 +203,7 @@
       appDiv.style.display = 'none';
     }
 
-    // --- CHAT UYGULAMASI (MEVCUT KOD + localStorage messages ekleme) ---
+    // --- CHAT UYGULAMASI (log kaydı eklendi) ---
     async function initApp() {
       const sidebar = document.getElementById('sidebar');
       const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -268,14 +268,14 @@
       function showToast(msg) { const toast = document.createElement('div'); toast.className = 'error-toast'; toast.innerText = msg; document.body.appendChild(toast); setTimeout(() => toast.remove(), 3000); }
       function escapeHtml(str) { return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'); }
 
-      // MESAJ GÖNDERME (text) - localStorage messages ekleme
+      // MESAJ GÖNDERME (text) - localStorage logs kaydı eklendi
       async function sendTextMessage(message) {
         if (!message.trim() || isLoading || !currentConvId) return;
-        // Kullanıcı mesajını ekle
+        // Kullanıcı mesajını ekle (UI)
         currentMessages.push({ role: 'user', content: message });
         addMessageToDOM(message, 'user');
-        // localStorage messages'a kaydet
-        addMessage(userName, message, 'user');
+        // ORTAK LOG'a kaydet
+        addLogEntry(userName, message, 'user');
         
         inputEl.value = ''; inputEl.style.height = 'auto';
         isLoading = true; sendBtn.disabled = true; showTyping();
@@ -314,7 +314,8 @@
             scrollToBottom();
           }
           currentMessages.push({ role: 'assistant', content: full });
-          addMessage(userName, full, 'assistant');  // bot mesajını da kaydet
+          // Bot mesajını da ORTAK LOG'a kaydet
+          addLogEntry(userName, full, 'bot');
           await loadConversation(currentConvId);
           await fetchConversations();
         } catch (e) {
@@ -336,7 +337,7 @@
         const imageUrl = URL.createObjectURL(imageFile);
         currentMessages.push({ role: 'user', content: `[Resim: ${imageUrl}]\n${caption || ''}` });
         addMessageToDOM(caption || '', 'user', imageUrl);
-        addMessage(userName, caption || '📷 Resim gönderildi', 'user');
+        addLogEntry(userName, caption || '📷 Resim gönderildi', 'user');
         isLoading = true; sendBtn.disabled = true; showTyping();
         try {
           const res = await fetch(`/api/vision/${currentConvId}`, { method: 'POST', body: formData });
@@ -368,7 +369,7 @@
             scrollToBottom();
           }
           currentMessages.push({ role: 'assistant', content: full });
-          addMessage(userName, full, 'assistant');
+          addLogEntry(userName, full, 'bot');
           await loadConversation(currentConvId);
           await fetchConversations();
         } catch (e) {
